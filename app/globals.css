@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: #fff8f0;
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(242, 200, 121, 0.18), transparent 38%),
+    radial-gradient(circle at 88% 8%, rgba(167, 199, 217, 0.18), transparent 36%),
+    radial-gradient(circle at 78% 92%, rgba(157, 191, 158, 0.16), transparent 40%);
+  color: #4a3f35;
+  min-height: 100vh;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-amber-100/80 bg-white/80 p-5 shadow-soft backdrop-blur-sm;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply bg-terracotta text-white shadow-soft hover:bg-[#b86a4a];
+  }
+  .btn-soft {
+    @apply border border-amber-200 bg-white/70 text-ink hover:bg-amber-50;
+  }
+  .btn-ghost {
+    @apply text-ink/70 hover:bg-amber-50;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white/70 px-3 py-1 text-xs font-medium text-ink/80;
+  }
+
+  .label {
+    @apply mb-1 block text-sm font-semibold text-ink/80;
+  }
+  .input,
+  .select,
+  .textarea {
+    @apply w-full rounded-xl border border-amber-200 bg-white/90 px-3 py-2 text-sm text-ink outline-none transition focus:border-terracotta focus:ring-2 focus:ring-peach/40;
+  }
+
+  .section-title {
+    @apply flex items-center gap-2 text-lg font-bold text-ink;
+  }
+}
+
+/* やわらかいスクロールバー */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(201, 123, 90, 0.35);
+  border-radius: 999px;
+}
