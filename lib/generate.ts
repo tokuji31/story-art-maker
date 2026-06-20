@@ -1,29 +1,20 @@
 // =========================================================================
-// 物語生成エンジン（第一弾：テンプレート生成）
+// 物語生成エンジン（テンプレート版・強化）
+//
+// 既存の「つるるんとんの絵本」を分析して得た作りを再現：
+//   ・会話が主役（語りは最小限）
+//   ・段階的な告白（カット→お顔剃り→毛穴洗浄→ヘッドスパ と本音が深まる）
+//   ・クライマックスの反転（隠していた気づきが終盤で開く）
+//   ・比喩タイトル＋締めの比喩一文
+//   ・静寂／五感／反復（ハサミの音だけ・ふわふわの泡・チョキチョキ）
 //
 // ★ 差し替えポイント ★
-//   generateStory() は「入力 → StoryResult」の純粋関数。
-//   将来 AI API をつなぐときは、この関数の中身だけを
-//   「プロンプト組み立て → fetch('/api/generate-story') → 整形」に
-//   置き換えれば、画面側は一切変更不要。
+//   本物の“感動”は lib/ai.ts の aiGenerateStory()（BYOK）が担当。
+//   この関数は API キー無しでも動く無料フォールバック。
 // =========================================================================
 
 import { charLen, genId } from "./id";
-import {
-  BrandLedger,
-  StoryInput,
-  StoryPage,
-  StoryResult,
-} from "./types";
-
-interface BeatTemplate {
-  stepId: string; // メニュー工程ID（arrive / pause は擬似）
-  bgId: string; // 背景プレートID
-  emotion: string; // 感情
-  imageScene: string; // 画像シーン案
-  full: (c: Ctx) => string;
-  droppable: boolean; // 文字数モードで省略してよいか
-}
+import { BrandLedger, StoryInput, StoryPage, StoryResult } from "./types";
 
 interface Ctx {
   input: StoryInput;
@@ -32,6 +23,25 @@ interface Ctx {
   tsuru: string;
   run: string;
   rona: string;
+  reason: string;
+  outer: string;
+  worry: string;
+  complaint: string;
+  complex: string;
+  realize: string;
+  mood: string;
+  motif: string; // 比喩の核（荷物・殻・角…）
+  inner: string; // しまいこんだ内なるもの（声・やさしさ…）
+}
+
+interface BeatTemplate {
+  stepId: string;
+  bgId: string;
+  emotion: string;
+  imageScene: string;
+  droppable: boolean;
+  rich: (c: Ctx) => string;
+  lite: (c: Ctx) => string;
 }
 
 const PSEUDO_STEP_NAME: Record<string, string> = {
@@ -47,43 +57,107 @@ function stepName(brand: BrandLedger, stepId: string): string {
   );
 }
 
-// ---- 物語のビート（つるるんとんの工程に沿った王道アーク） ---------------
+// ---- 比喩の核（モチーフ）を入力から推定 -------------------------------
+const MOTIF_RULES: { keys: string[]; motif: string }[] = [
+  { keys: ["荷物", "背負", "せお", "重"], motif: "荷物" },
+  { keys: ["殻", "から", "こうら", "かめ", "カメ"], motif: "殻" },
+  { keys: ["角", "しか", "シカ", "鹿"], motif: "角" },
+  { keys: ["光", "太陽", "ほたる", "ホタル"], motif: "光" },
+  { keys: ["仮面", "マスク", "つくり笑"], motif: "仮面" },
+  { keys: ["帽子", "ぼうし"], motif: "帽子" },
+  { keys: ["鎧", "よろい", "とげ", "トゲ"], motif: "よろい" },
+  { keys: ["走", "うさぎ", "ウサギ", "止まれ"], motif: "足あと" },
+];
 
+function detectMotif(c: Pick<StoryInput, "guestName" | "guestType" | "appearance" | "realWorry" | "complex">): string {
+  const text = [c.guestName, c.guestType, c.appearance, c.realWorry, c.complex].join(" ");
+  for (const r of MOTIF_RULES) {
+    if (r.keys.some((k) => text.includes(k))) return r.motif;
+  }
+  return "胸の奥";
+}
+
+function detectInner(realize: string): string {
+  if (/(やさし|優し)/.test(realize)) return "やさしさ";
+  if (/(声|言葉|本音)/.test(realize)) return "声";
+  if (/(弱|よわ)/.test(realize)) return "よわさ";
+  if (/(休|つかれ|疲)/.test(realize)) return "ひとやすみ";
+  return "ほんとうの気持ち";
+}
+
+// ---- 比喩タイトル -----------------------------------------------------
+function makeTitle(c: Ctx): string {
+  const patterns = [
+    `${c.motif}の奥に、しまいこんだ${c.inner}`,
+    `${c.motif}の下の、ほんとうの顔`,
+    `${c.motif}と、${c.realize}`,
+  ];
+  // 入力で決定的に選ぶ（毎回同じ結果）
+  const seed = Array.from(c.name).reduce((a, ch) => a + ch.charCodeAt(0), 0);
+  return patterns[seed % patterns.length];
+}
+
+// ---- 締めの比喩一文 ---------------------------------------------------
+function makeClosingLine(c: Ctx): string {
+  return (
+    `ぜんぶ自分で抱えることが、つよさだと思っていました。\n` +
+    `でも、ほんとうは——${c.realize}、ということでした。`
+  );
+}
+
+// ---- 物語のビート（会話駆動・段階的告白） ------------------------------
 const BEATS: BeatTemplate[] = [
   {
     stepId: "arrive",
     bgId: "bg-iriguchi",
     emotion: "緊張と、ほんの少しの期待",
-    imageScene: "入口でお出迎え。あたたかい光、ロナは出さずに2人で迎える構図。",
+    imageScene: "入口でお出迎え。あたたかい光。2人がやさしく迎える構図。",
     droppable: false,
-    full: (c) => {
-      const parts = [`${c.name}は、お店のドアをそっと開けました。`];
-      if (c.input.outerAttitude) parts.push(`${c.input.outerAttitude}。`);
-      if (c.input.visitReason)
-        parts.push(`でも、心の奥では——${c.input.visitReason}。`);
-      parts.push(`${c.tsuru}と${c.run}は、あたたかく迎えます。`);
-      return parts.join("");
-    },
+    rich: (c) =>
+      `ある日の午後。つるるんとんの扉が、ちりんと鳴りました。\n` +
+      `入ってきたのは、${c.name}。少しだけ、疲れた目をしています。\n` +
+      `「いらっしゃいませ。どうぞ、こちらへ。」${c.run}が、やわらかく迎えました。\n` +
+      `「あ、どうも。……${c.reason}って言われて。それだけ、なんとかなればいいんです。${c.outer}。」\n` +
+      `${c.tsuru}は、湯気の立つおしぼりをそっと手渡しながら、にこっと笑いました。\n` +
+      `「“大丈夫”って、よく言いますね。」「え?」\n` +
+      `「いえ。今日は、ぜんぶこちらにおまかせで。ゆっくりしていってください。まずは、髪から整えましょうか。」`,
+    lite: (c) =>
+      `つるるんとんの扉が、ちりんと鳴りました。入ってきたのは${c.name}。「${c.reason}が気になって……でも大丈夫です。」` +
+      `${c.tsuru}と${c.run}は、あたたかく迎えました。`,
   },
   {
     stepId: "cut",
     bgId: "bg-cut-angle",
-    emotion: "輪郭が整いはじめる安心感",
-    imageScene: "カット椅子斜め。背後から、肩より上。安心した表情中心。",
+    emotion: "輪郭が整いはじめる",
+    imageScene: "カット椅子斜め。背後から、肩より上。落ち着いた表情。",
     droppable: true,
-    full: (c) =>
-      `${c.tsuru}は、ていねいにハサミを動かします。チョキ、チョキ。少しずつ、${c.name}の輪郭が整っていきます。` +
-      `鏡の中の自分が、さっきより少しだけ、すっきりして見えました。`,
+    rich: (c) =>
+      `チョキ、チョキ。${c.tsuru}のハサミが、ゆっくり動きます。\n` +
+      `「お仕事、お忙しいんですか?」${c.tsuru}が、さらりと聞きました。\n` +
+      `「ええ、まあ。人より少し、抱えてるほうかもしれません。でも、ぼくがやれば、まるくおさまるんで。慣れてます。」\n` +
+      `「ひとりで、ぜんぶ?」\n` +
+      `「みんな、忙しいですから。頼むのも、なんだか申し訳なくて。」\n` +
+      `${c.tsuru}は、それ以上は聞かず、ただ手を動かします。チョキ、チョキ。\n` +
+      `ハサミの音だけが、しばらく店にひびきました。鏡の中の${c.name}が、さっきより少しだけ、すっきりして見えます。`,
+    lite: (c) =>
+      `チョキ、チョキ。${c.tsuru}がていねいに髪を整えます。${c.name}の輪郭が、少しずつすっきりしていきました。`,
   },
   {
     stepId: "shave",
     bgId: "bg-shave",
     emotion: "張りつめたものが、ほどける",
-    imageScene: "顔剃り。安心した表情を中心に。手元・カミソリは控えめ・抽象的に。",
+    imageScene: "顔剃り。安心した表情中心。手元・カミソリは控えめに。",
     droppable: true,
-    full: (c) =>
-      `あたたかい蒸しタオルが、ふわりと顔をつつみます。お顔剃りがすすむと、張りつめていた表情が、すこしずつほどけていきます。` +
-      `「…最近、ちょっと疲れていて」。${c.name}の口から、小さな本音がこぼれました。${c.run}は、ただやさしくうなずきます。`,
+    rich: (c) =>
+      `席をそっと倒し、あたたかい蒸しタオルが、ふわりと顔をつつみます。\n` +
+      `こわばっていた表情が、ほんの少し、ほどけました。\n` +
+      `「……じつは最近、${c.complaint || "あんまり眠れてなくて"}。」\n` +
+      `ぽつり、と言葉がこぼれます。「あ、でも大丈夫です。みんな、あることだし。」\n` +
+      `${c.run}は、否定も、はげましもせず、ただ、しずかにうなずきました。\n` +
+      `「そうですか。……無理に話さなくても、いいんですよ。ここでは。」\n` +
+      `その一言に、${c.name}は、なぜだか少しだけ、肩の力がゆるむのを感じました。`,
+    lite: (c) =>
+      `あたたかい蒸しタオルに、表情がほどけます。「……最近、ちょっと疲れていて。」${c.name}の本音が、少しこぼれました。`,
   },
   {
     stepId: "pore",
@@ -91,22 +165,35 @@ const BEATS: BeatTemplate[] = [
     emotion: "モヤモヤが流れていく",
     imageScene: "毛穴洗浄。流れる水のやわらかい表現。ほどけていく表情。",
     droppable: true,
-    full: (c) =>
-      `お顔の毛穴を、やさしく洗い流していきます。顔の汚れといっしょに、心の奥にたまっていたモヤモヤも、すっと流れていくようでした。` +
-      (c.input.complaint
-        ? `「${c.input.complaint}」。言えなかった愚痴が、ぽつりとこぼれます。`
-        : `言えずにいた思いが、すこしずつほどけていきます。`),
+    rich: (c) =>
+      `${c.run}が、ふわふわの泡を立てます。\n` +
+      `顔の汚れといっしょに、心の奥のモヤモヤまで、すうっと流れていくようでした。\n` +
+      `「……変ですよね。」${c.name}が、小さく笑いました。\n` +
+      `「だれかに『手伝おうか』って言われると、つい『大丈夫』って言っちゃうんです。」\n` +
+      `「ほんとうは、${c.worry}。でも、弱ってるとこ、見せたくなくて。心配を、かけたくなくて。」\n` +
+      `「うん。」${c.run}は、相づちだけを、そっと返します。せかさず、ただ聞いていました。\n` +
+      `泡が、ぱちぱちと、静かにはじけました。`,
+    lite: (c) =>
+      `ふわふわの泡といっしょに、心の詰まりも流れていきます。「ほんとうは、${c.worry}。」言えなかった思いが、ぽつりとこぼれました。`,
   },
   {
     stepId: "spa",
     bgId: "bg-spa",
-    emotion: "重さがほどけ、本音が出る",
+    emotion: "重さがほどけ、本音が出る（物語の山）",
     imageScene: "ヘッドスパ。頭がふわっと軽くなる抽象表現。やすらいだ表情。",
     droppable: false,
-    full: (c) =>
-      `極みヘッドスパが始まります。頭のおくにあった重さが、ふわっと軽くなっていきます。` +
-      `${c.run}は、そっと声をかけます。「${c.input.realWorry || "ひとりで抱えてきたこと"}——ひとりで全部、背負わなくてもいいんですよ」。` +
-      `${c.name}は、しずかに目を閉じました。`,
+    rich: (c) =>
+      `${c.run}の手が、ゆっくりと頭を包みます。指のはらが、こめかみを、やさしく押していきます。\n` +
+      `頭のおくにあった重さが、ふわっと、軽くなっていきます。\n` +
+      `${c.run}は、手を動かしながら、そっと言いました。\n` +
+      `「がんばってきた人ほど、自分のことは、後回しにしちゃうんですよね。」\n` +
+      `「……。」\n` +
+      `「でもね。${c.realize}——わたしは、そう思うんです。」\n` +
+      `${c.name}の息が、すこし、止まりました。お湯の流れる音だけが、店に残ります。\n` +
+      `ふいに、思い出しました。いつだったか、近くにいた誰かが、言ってくれたことを。「無理しないで」「手伝うよ」——あのとき、いつものように「大丈夫」と、返してしまった。\n` +
+      `その人の、少しさみしそうな顔。あの意味が、いま、ようやく、わかった気がしました。`,
+    lite: (c) =>
+      `${c.run}の手が、頭の重さをほどいていきます。「${c.realize}——そう思うんです。」その一言が、${c.name}の胸に、しずかに残りました。`,
   },
   {
     stepId: "pause",
@@ -114,21 +201,28 @@ const BEATS: BeatTemplate[] = [
     emotion: "気づきの余韻",
     imageScene: "静かな間。光の粒。肩の力がぬける抽象表現。",
     droppable: true,
-    full: (c) =>
-      `しばらく、ただ静かな時間が流れます。何も言わなくていい時間。` +
-      `${c.name}は、はりつめていた肩の力が、すっと抜けていくのを感じました。`,
+    rich: (c) =>
+      `しばらく、ただ静かな時間が流れました。何も言わなくていい時間。\n` +
+      `${c.name}は、はりつめていた肩の力が、すっと抜けていくのを感じました。\n` +
+      `${c.motif}が、ほんの少しだけ、軽くなった気がしました。`,
+    lite: (c) =>
+      `しばらく、静かな時間が流れます。${c.name}の肩から、すっと力が抜けていきました。`,
   },
   {
     stepId: "mirror",
     bgId: "bg-mirror",
-    emotion: "整った自分を、まっすぐ見る",
+    emotion: "整った自分を、まっすぐ見る（反転）",
     imageScene: "鏡前。本人の表情が主役。鏡はやわらかいボケで添える。",
     droppable: true,
-    full: (c) =>
-      `施術が終わり、鏡の前にすわります。映っているのは、さっきより少しやわらかい表情の自分。` +
-      (c.input.complex
-        ? `${c.input.complex}。そのことがずっと気がかりだったけれど、いまは不思議と、まっすぐ見られました。`
-        : `気がかりだったことも、いまは不思議と、まっすぐ見られました。`),
+    rich: (c) =>
+      `施術が終わり、鏡の前にすわります。\n` +
+      `映っていたのは、さっきより、少しやわらかい顔の${c.name}でした。\n` +
+      `「ぼく、ずっと、ぜんぶ自分でやることが、つよさだと思ってました。」${c.name}が、ぽつりと言いました。\n` +
+      `「でも……ちがったのかもしれません。」\n` +
+      `${c.tsuru}は、ただ、うなずきました。「整いましたね。いい顔です。」\n` +
+      `鏡の中の自分と、しばらく、目が合っていました。なぜだか、まっすぐに見られました。`,
+    lite: (c) =>
+      `鏡に映るのは、やわらかい表情の${c.name}。「ぜんぶ自分で、と思ってたけど……ちがったのかも。」少し、前を向けた気がしました。`,
   },
   {
     stepId: "leave",
@@ -136,39 +230,22 @@ const BEATS: BeatTemplate[] = [
     emotion: "また明日も、少し頑張れそう",
     imageScene: "帰り際。ロナが足元にそっと寄りそう。やわらかい夕方の光。",
     droppable: false,
-    full: (c) =>
+    rich: (c) =>
       (c.input.useRona
-        ? `帰りぎわ、${c.rona}がとことことやってきて、足元にちょこんと寄りそいました。${c.name}は、ふっと笑います。`
+        ? `足元に、とことこと、${c.rona}がやってきました。くわえていたのは、${c.name}のぼうし。「はい、どうぞ」とでも言うように、ちょこんと置きます。\n` +
+          `${c.name}は、ふっと笑いました。「……ありがとう。半分、もってくれたんだね。」\n`
+        : `${c.name}は、ドアの前で、ふっと笑いました。\n`) +
+      `ドアの外は、いつのまにか、やわらかい夕方の光。\n` +
+      `${c.name}は、来たときより、少しだけ軽い足どりで、帰っていきました。\n` +
+      `${makeClosingLine(c)}\n` +
+      `そして今日もまた。つるるんとんから、心が少し軽くなったお客様が、帰っていきました。`,
+    lite: (c) =>
+      (c.input.useRona
+        ? `帰りぎわ、${c.rona}が足元にそっと寄りそいました。${c.name}は、ふっと笑います。`
         : `帰りぎわ、${c.name}は、ふっと笑いました。`) +
-      `『${c.input.finalRealization || "頼ってもいい"}』——そう気づけた気がしました。` +
-      `「また明日も、少し頑張れそうだ」。${c.input.mood || "おだやか"}な気持ちで、ドアを開けて帰っていきました。`,
+      `「また明日も、少し頑張れそうだ。」${c.mood}な気持ちで、ドアを開けて帰っていきました。`,
   },
 ];
-
-// 文字数を目標に近づける（簡易）。文単位でトリム、短すぎれば一文だけ補う。
-function fitText(text: string, target: number): string {
-  const len = charLen(text);
-  if (len <= Math.round(target * 1.5)) {
-    if (len < Math.round(target * 0.5)) {
-      return text + "やわらかい時間が、ゆっくりと流れていきました。";
-    }
-    return text;
-  }
-  const sentences = text.split("。").filter((s) => s.length > 0);
-  let out = "";
-  for (const s of sentences) {
-    const cand = out + s + "。";
-    if (charLen(cand) > Math.round(target * 1.3) && out) break;
-    out = cand;
-  }
-  return out || text;
-}
-
-function pickByHash(seed: string, options: string[]): string {
-  let sum = 0;
-  for (const ch of seed) sum += ch.charCodeAt(0);
-  return options[sum % options.length];
-}
 
 export function generateStory(
   input: StoryInput,
@@ -181,6 +258,7 @@ export function generateStory(
     blogIntroChars: number;
   },
 ): StoryResult {
+  const realize = input.finalRealization || "頼ってもいい";
   const ctx: Ctx = {
     input,
     brand,
@@ -188,15 +266,24 @@ export function generateStory(
     tsuru: brand.characters.find((c) => c.id === "tsuru")?.name ?? "つる君",
     run: brand.characters.find((c) => c.id === "run")?.name ?? "るんちゃん",
     rona: brand.characters.find((c) => c.id === "rona")?.name ?? "ロナ",
+    reason: input.visitReason || "顔が疲れて見える",
+    outer: input.outerAttitude || "「大丈夫です」と笑ってしまう",
+    worry: input.realWorry || "うまく弱音を吐けない",
+    complaint: input.complaint,
+    complex: input.complex,
+    realize,
+    mood: input.mood || "静かに前向き",
+    motif: detectMotif(input),
+    inner: detectInner(realize),
   };
+
+  // しっかり読ませる/標準 は会話たっぷりの rich、短め系は lite
+  const rich = charsPerPage >= 160;
 
   // --- ページ数に合わせてビートを選ぶ ---
   let beats = [...BEATS];
-  // 強調工程は必ず残す
   const keepStep = input.emphasizedStepId;
-
-  // 多すぎる場合：droppable を後ろの優先度から外す
-  const dropOrder = ["pause", "mirror", "pore", "shave", "cut"];
+  const dropOrder = ["pause", "cut", "mirror", "pore", "shave"];
   if (pagesTarget < beats.length) {
     for (const id of dropOrder) {
       if (beats.length <= pagesTarget) break;
@@ -204,7 +291,6 @@ export function generateStory(
       beats = beats.filter((b) => b.stepId !== id);
     }
   }
-  // 少なすぎる場合：pause を ヘッドスパの後ろに足す
   if (pagesTarget > beats.length) {
     const pauseTpl = BEATS.find((b) => b.stepId === "pause")!;
     while (beats.length < pagesTarget) {
@@ -213,10 +299,8 @@ export function generateStory(
     }
   }
 
-  // --- ページ生成 ---
   const pages: StoryPage[] = beats.map((b, i) => {
-    const raw = b.full(ctx);
-    const text = fitText(raw, charsPerPage);
+    const text = rich ? b.rich(ctx) : b.lite(ctx);
     return {
       index: i + 1,
       text,
@@ -228,43 +312,26 @@ export function generateStory(
     };
   });
 
-  const emphasizedName = stepName(brand, keepStep);
-
-  // --- タイトル・あらすじ ---
-  const title = `${ctx.name}と「${input.finalRealization || "小さな気づき"}」`;
+  const title = makeTitle(ctx);
 
   const synopsis =
-    (input.visitReason
-      ? `「${input.visitReason}」。そんな思いを抱えて、`
-      : `ふとした思いを抱えて、`) +
-    `${brand.store.name}を訪れた${ctx.name}。` +
-    `${brand.menu.name}を受けるうちに、張りつめていた心が少しずつほどけていきます。` +
+    `「${ctx.reason}」。そんな思いを抱えて、${brand.store.name}を訪れた${ctx.name}。` +
+    `${brand.menu.name}を受けるうちに、張りつめていた心が、少しずつほどけていきます。` +
     (input.useRona ? `${ctx.rona}のぬくもりにもふれ、` : ``) +
-    `最後に「${input.finalRealization || "小さな気づき"}」という気づきにたどり着く、${input.mood || "静かに前向き"}な1話。`;
+    `最後に「${ctx.realize}」という気づきにたどり着く、${ctx.mood}な1話。`;
 
-  // --- 派生テキスト（ハガキ・SNS・ブログ） ---
-  const postcardLine = fitText(
-    pickByHash(ctx.name, [
-      `整える時間は、心がふっと軽くなる時間。`,
-      `「${input.finalRealization || "また明日も少し頑張れそう"}」。そんな帰り道を、${brand.store.name}で。`,
-      `今日のあなたを、少しだけ軽くする場所。`,
-    ]),
-    extraLengths.postcardLineChars,
-  );
+  const postcardLine =
+    `${ctx.motif}を、ひとりで抱えなくていい。つるるんとんで、心も少し軽く。`;
 
-  const snsShort = fitText(
-    `${brand.store.tagline}、${brand.store.name}。` +
-      `今日のお話は『${title}』。施術のあと、ふっと心が軽くなる——そんな時間をどうぞ。` +
-      `#理容室 #メンズ美容 #つるるんとん`,
-    extraLengths.snsShortChars,
-  );
+  const snsShort =
+    `${brand.store.tagline}、${brand.store.name}。\n` +
+    `今日のお話は『${title}』。${ctx.realize}——施術のあと、ふっと心が軽くなる物語です。\n` +
+    `#理容室 #メンズ美容 #つるるんとん #絵本`;
 
-  const blogIntro = fitText(
-    `「${input.complaint || "なんだか最近、疲れて見える"}」——そんなふうに感じる日は、ありませんか。` +
-      `${brand.store.name}を訪れたある日の${ctx.name}も、同じでした。` +
-      `今日は${brand.menu.name}を通して、心が少し軽くなる小さな物語をお届けします。`,
-    extraLengths.blogIntroChars,
-  );
+  const blogIntro =
+    `「${ctx.complaint || ctx.reason}」——そんなふうに感じる日は、ありませんか。\n` +
+    `${brand.store.name}を訪れたある日の${ctx.name}も、同じでした。\n` +
+    `${brand.menu.name}の時間が進むほどに、こわばっていた心がほどけていく——そんな小さな物語を、今日はお届けします。`;
 
   const usedSteps = Array.from(
     new Set(pages.map((p) => p.serviceStep).filter((s) => s !== "—")),
@@ -274,13 +341,14 @@ export function generateStory(
     id: genId("story"),
     createdAt: new Date().toISOString(),
     status: "draft",
+    source: "template",
     input,
     title,
     synopsis,
     pages,
     emotionFlow: pages.map((p) => p.emotion),
     usedSteps,
-    finalRealization: input.finalRealization || "小さな気づき",
+    finalRealization: ctx.realize,
     postcardLine,
     snsShort,
     blogIntro,
@@ -292,7 +360,6 @@ export function generateStory(
 }
 
 // ---- ゲスト提案（「悩み」→ メタファーキャラ） --------------------------
-// 例：「家族にも職場にも弱音を吐けない男性」→「大きな荷物を背負ったくま君」
 
 interface GuestSuggestion {
   guestName: string;
@@ -305,7 +372,7 @@ interface GuestSuggestion {
 
 const GUEST_PRESETS: { keys: string[]; s: GuestSuggestion }[] = [
   {
-    keys: ["弱音", "頼れない", "我慢", "抱え", "背負"],
+    keys: ["弱音", "頼れ", "頼る", "我慢", "抱え", "背負"],
     s: {
       guestName: "大きな荷物を背負ったくま君",
       guestType: "くま",
@@ -375,7 +442,6 @@ export function suggestGuest(worryText: string): GuestSuggestion {
   for (const p of GUEST_PRESETS) {
     if (p.keys.some((k) => text.includes(k))) return p.s;
   }
-  // キーワードに当たらなければ、文字でゆるく振り分け（決定的）
   if (text.trim()) {
     const idx =
       Array.from(text).reduce((a, c) => a + c.charCodeAt(0), 0) %

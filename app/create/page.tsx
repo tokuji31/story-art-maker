@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { suggestGuest } from "@/lib/generate";
+import { aiGenerateStory, AI_MODELS } from "@/lib/ai";
 import { SAMPLE_STORY_INPUT } from "@/lib/seed";
 import { PageHeader, Toggle } from "@/components/ui";
 import { StoryInput, TEXT_MODE_LABEL, TextMode } from "@/lib/types";
@@ -36,13 +37,25 @@ function emptyInput(mode: TextMode, firstStep: string): StoryInput {
 }
 
 export default function CreatePage() {
-  const { brand, textDesign, createStory, hydrated } = useStore();
+  const {
+    brand,
+    textDesign,
+    createStory,
+    addStory,
+    settings,
+    setSettings,
+    hydrated,
+  } = useStore();
   const router = useRouter();
   const firstStep = brand.menu.steps[0]?.id ?? "cut";
   const [input, setInput] = useState<StoryInput>(
     emptyInput(textDesign.mode, firstStep),
   );
   const [worrySeed, setWorrySeed] = useState("");
+  const [method, setMethod] = useState<"template" | "ai">("template");
+  const [showKey, setShowKey] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   if (!hydrated) {
     return <div className="py-20 text-center text-ink/40">読み込み中…</div>;
@@ -63,9 +76,34 @@ export default function CreatePage() {
     });
   };
 
-  const onGenerate = () => {
-    createStory(input); // currentStory も自動でこの作品になる
-    router.push("/story");
+  const onGenerate = async () => {
+    setAiError(null);
+    if (method === "template") {
+      createStory(input); // currentStory も自動でこの作品になる
+      router.push("/story");
+      return;
+    }
+    // AI本格生成（BYOK）
+    if (!settings.anthropicApiKey.trim()) {
+      setShowKey(true);
+      setAiError("AIで生成するには、自分のAPIキーが必要です。下に入力してください。");
+      return;
+    }
+    setGenerating(true);
+    try {
+      const story = await aiGenerateStory(input, brand, textDesign, {
+        apiKey: settings.anthropicApiKey,
+        model: settings.aiModel,
+      });
+      addStory(story);
+      router.push("/story");
+    } catch (e) {
+      setAiError(
+        e instanceof Error ? e.message : "生成に失敗しました。もう一度お試しください。",
+      );
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const text = (
@@ -224,12 +262,102 @@ export default function CreatePage() {
         </div>
       </section>
 
+      {/* 生成方法 */}
+      <section className="card mb-4">
+        <h2 className="section-title mb-3">⚙️ 生成方法</h2>
+        <div className="inline-flex rounded-full bg-amber-100 p-1">
+          {(
+            [
+              ["template", "🆓 無料テンプレ"],
+              ["ai", "✨ AIで本格生成"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                setMethod(m);
+                setAiError(null);
+                if (m === "ai") setShowKey(true);
+              }}
+              className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                method === m ? "bg-terracotta text-white" : "text-ink/60"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-ink/55">
+          {method === "template"
+            ? "無料・キー不要。会話と終盤の反転を入れた“強化テンプレ”で生成します。"
+            : "自分のAnthropic APIキーを使って、サンプル級の感動を生成します（鍵を使った分だけ西川様のAI利用料がかかります）。"}
+        </p>
+
+        {method === "ai" && (
+          <div className="mt-3 space-y-2 rounded-xl border border-amber-100 bg-amber-50/50 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-ink/80">
+                🔑 Anthropic APIキー
+              </span>
+              <button
+                type="button"
+                className="text-xs text-terracotta hover:underline"
+                onClick={() => setShowKey((v) => !v)}
+              >
+                {showKey ? "隠す" : "表示"}
+              </button>
+            </div>
+            <input
+              type={showKey ? "text" : "password"}
+              className="input font-mono text-xs"
+              placeholder="sk-ant-..."
+              value={settings.anthropicApiKey}
+              onChange={(e) => setSettings({ anthropicApiKey: e.target.value })}
+            />
+            <div>
+              <label className="label">モデル</label>
+              <select
+                className="select"
+                value={settings.aiModel}
+                onChange={(e) => setSettings({ aiModel: e.target.value })}
+              >
+                {AI_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-[11px] leading-relaxed text-ink/50">
+              🔒 キーはこの端末のブラウザにだけ保存され、私たちのサーバーには送られません（生成時に Anthropic へ直接送信されます）。
+            </p>
+          </div>
+        )}
+
+        {aiError && (
+          <p className="mt-3 rounded-xl border border-terracotta/40 bg-terracotta/5 p-2 text-sm text-terracotta">
+            ⚠️ {aiError}
+          </p>
+        )}
+      </section>
+
       <div className="sticky bottom-4 z-10 flex items-center justify-end gap-3 rounded-2xl border border-amber-100 bg-white/90 p-3 shadow-soft backdrop-blur">
         <span className="mr-auto text-xs text-ink/50">
-          入力をもとにテンプレ生成します（AI API 未接続）
+          {method === "template"
+            ? "無料テンプレで生成します"
+            : "AIで本格生成します（数十秒かかることがあります）"}
         </span>
-        <button className="btn btn-primary" onClick={onGenerate}>
-          📖 物語を生成する
+        <button
+          className="btn btn-primary"
+          onClick={onGenerate}
+          disabled={generating}
+        >
+          {generating
+            ? "⏳ 生成中…"
+            : method === "ai"
+              ? "✨ AIで物語を生成"
+              : "📖 物語を生成する"}
         </button>
       </div>
     </div>

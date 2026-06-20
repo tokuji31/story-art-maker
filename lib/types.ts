@@ -153,6 +153,7 @@ export interface StoryResult {
   id: string;
   createdAt: string;
   status: "draft" | "saved";
+  source: "template" | "ai"; // 生成方法（無料テンプレ / AI本格生成）
   input: StoryInput;
   title: string; // タイトル
   synopsis: string; // あらすじ

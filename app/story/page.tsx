@@ -78,9 +78,14 @@ export default function StoryPage() {
       <section className="card mb-4 bg-gradient-to-br from-white/90 to-amber-50/70">
         <div className="flex items-start justify-between gap-2">
           <h1 className="text-2xl font-extrabold text-ink">{story.title}</h1>
-          <Pill tone={story.status === "saved" ? "ok" : "default"}>
-            {story.status === "saved" ? "保存済み" : "作成中"}
-          </Pill>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <Pill tone={story.status === "saved" ? "ok" : "default"}>
+              {story.status === "saved" ? "保存済み" : "作成中"}
+            </Pill>
+            <Pill tone={story.source === "ai" ? "warn" : "default"}>
+              {story.source === "ai" ? "✨ AI生成" : "🆓 テンプレ"}
+            </Pill>
+          </div>
         </div>
         <p className="mt-2 leading-relaxed text-ink/75">{story.synopsis}</p>
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -143,7 +148,9 @@ export default function StoryPage() {
                   {p.charCount} 字
                 </span>
               </div>
-              <p className="leading-relaxed text-ink/85">{p.text}</p>
+              <p className="whitespace-pre-line leading-relaxed text-ink/85">
+                {p.text}
+              </p>
               <div className="mt-3 rounded-xl bg-sky/10 p-3 text-sm">
                 <span className="font-bold text-ink/60">🎨 画像シーン案：</span>
                 <span className="text-ink/80">{p.imageScene}</span>
@@ -172,7 +179,7 @@ export default function StoryPage() {
         </div>
         <div className="card">
           <h3 className="font-bold text-ink">✏️ ブログ導入文</h3>
-          <p className="mt-1 text-ink/80">{story.blogIntro}</p>
+          <p className="mt-1 whitespace-pre-line text-ink/80">{story.blogIntro}</p>
         </div>
       </section>
 

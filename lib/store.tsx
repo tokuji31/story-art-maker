@@ -37,6 +37,11 @@ import {
 
 const STORAGE_KEY = "story-art-maker:v1";
 
+interface AppSettings {
+  anthropicApiKey: string;
+  aiModel: string;
+}
+
 interface AppState {
   brand: BrandLedger;
   textDesign: TextDesign;
@@ -44,6 +49,7 @@ interface AppState {
   templates: SafeTemplate[];
   stories: StoryResult[];
   currentStoryId: string | null;
+  settings: AppSettings;
 }
 
 function seedState(): AppState {
@@ -54,6 +60,7 @@ function seedState(): AppState {
     templates: SEED_TEMPLATES,
     stories: [],
     currentStoryId: null,
+    settings: { anthropicApiKey: "", aiModel: "claude-opus-4-8" },
   };
 }
 
@@ -66,8 +73,11 @@ interface StoreValue extends AppState {
   applyTextMode: (mode: TextMode) => void;
   // 背景プレート
   updateBackground: (id: string, patch: Partial<BackgroundPlate>) => void;
+  // 設定（BYOK）
+  setSettings: (patch: Partial<AppSettings>) => void;
   // ストーリー
   createStory: (input: StoryInput) => StoryResult;
+  addStory: (story: StoryResult) => void;
   updateStory: (id: string, patch: Partial<StoryResult>) => void;
   saveStory: (id: string) => void;
   removeStory: (id: string) => void;
@@ -114,6 +124,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           templates: parsed.templates ?? base.templates,
           stories: parsed.stories ?? base.stories,
           currentStoryId: parsed.currentStoryId ?? null,
+          settings: { ...base.settings, ...(parsed.settings ?? {}) },
         });
       } else {
         // 初回：くま君サンプルを生成して保存済みとして投入
@@ -184,6 +195,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       })),
     [],
   );
+
+  const setSettings = useCallback(
+    (patch: Partial<AppSettings>) =>
+      setState((s) => ({ ...s, settings: { ...s.settings, ...patch } })),
+    [],
+  );
+
+  const addStory = useCallback((story: StoryResult) => {
+    setState((prev) => ({
+      ...prev,
+      stories: [story, ...prev.stories],
+      currentStoryId: story.id,
+    }));
+  }, []);
 
   const createStory = useCallback((input: StoryInput): StoryResult => {
     const s = stateRef.current;
@@ -340,7 +365,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setTextDesign,
     applyTextMode,
     updateBackground,
+    setSettings,
     createStory,
+    addStory,
     updateStory,
     saveStory,
     removeStory,

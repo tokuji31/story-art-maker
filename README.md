@@ -77,11 +77,19 @@ lib/
   outputs.ts         … 出力サイズ（店内アート・ハガキ）
 ```
 
-### AI / 画像生成APIのつなぎ方（将来）
+### 物語の生成（2モード）
 
-- **文章**：`lib/generate.ts` の `generateStory()` の中身を
-  「プロンプト組み立て → `/api/generate-story` 呼び出し → 整形」に置き換える。
-  画面側（入力→結果表示）は**無改修**。
+1話作成画面で「生成方法」を選べます。
+
+- **🆓 無料テンプレ**（`lib/generate.ts`）：API不要。会話駆動・段階的な告白・終盤の反転・
+  比喩タイトル・締めの一文・静寂/五感/反復の技法を入れた“強化テンプレ”。しっかり読ませる＝約2,000字。
+- **✨ AIで本格生成（BYOK）**（`lib/ai.ts`）：利用者自身の Anthropic APIキーを使い、
+  ブラウザから直接 Anthropic API を呼んで、人が書いた絵本に近い感動を生成。
+  既定モデルは `claude-opus-4-8`。キーは端末のlocalStorageのみに保存（サーバーには送らない）。
+  運営に継続課金が発生しない設計。
+
+### 画像生成APIのつなぎ方（将来）
+
 - **画像**：`lib/imagePrompt.ts` の `generateImage(prompt)` の中身に
   Nano Banana Pro などの呼び出しを実装し、`IMAGE_API_ENABLED = true` にする。
   返ってきた画像URLは `ImageDesignItem.imageUrl` に入り、プレースホルダーが実画像に変わる。
