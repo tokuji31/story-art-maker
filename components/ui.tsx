@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Difficulty, DIFFICULTY_LABEL } from "@/lib/types";
+import { fileToCompressedDataUrl } from "@/lib/image-upload";
 
 // ---- プレースホルダー画像カード（APIキー無しでも“画像枠”を見せる） ------
 export function PlaceholderImage({
@@ -35,6 +36,101 @@ export function PlaceholderImage({
         <div className="mt-1 text-sm font-bold text-ink/80">{label}</div>
         <div className="mt-0.5 text-[11px] text-ink/50">{caption}</div>
       </div>
+    </div>
+  );
+}
+
+// ---- アップロード可能な画像枠（実画像を貼ると差し替わる） --------------
+export function UploadableImage({
+  imageUrl,
+  hue = "30",
+  label,
+  caption = "画像プレースホルダー（生成API未接続）",
+  aspect = "aspect-video",
+  onChange,
+}: {
+  imageUrl: string | null | undefined;
+  hue?: string;
+  label: string;
+  caption?: string;
+  aspect?: string;
+  onChange: (dataUrl: string | null) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (inputRef.current) inputRef.current.value = "";
+    if (!file) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      const url = await fileToCompressedDataUrl(file);
+      onChange(url);
+    } catch {
+      setErr("画像を読み込めませんでした。別の画像でお試しください。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div
+        className={`relative flex ${aspect} w-full items-center justify-center overflow-hidden rounded-xl border border-amber-100`}
+        style={
+          imageUrl
+            ? undefined
+            : {
+                background: `linear-gradient(135deg, hsl(${hue} 70% 88%), hsl(${
+                  (Number(hue) + 40) % 360
+                } 60% 80%))`,
+              }
+        }
+      >
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={label}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="px-3 text-center">
+            <div className="text-3xl">🖼️</div>
+            <div className="mt-1 text-sm font-bold text-ink/80">{label}</div>
+            <div className="mt-0.5 text-[11px] text-ink/50">{caption}</div>
+          </div>
+        )}
+        {busy && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-sm text-ink/70">
+            読み込み中…
+          </div>
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <label className="btn btn-soft cursor-pointer">
+          {imageUrl ? "🔁 差し替え" : "📷 画像を貼る"}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={onFile}
+          />
+        </label>
+        {imageUrl && (
+          <button
+            type="button"
+            className="btn btn-ghost text-xs"
+            onClick={() => onChange(null)}
+          >
+            🗑️ 削除
+          </button>
+        )}
+      </div>
+      {err && <p className="mt-1 text-[11px] text-terracotta">{err}</p>}
     </div>
   );
 }

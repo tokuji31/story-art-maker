@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useStore } from "@/lib/store";
-import { DifficultyTag, PageHeader, PlaceholderImage } from "@/components/ui";
+import { DifficultyTag, PageHeader, UploadableImage } from "@/components/ui";
 import { BackgroundPlate, Difficulty } from "@/lib/types";
 
 const toLines = (arr: string[]) => arr.join("\n");
@@ -141,7 +141,19 @@ function BackgroundCard({ bg }: { bg: BackgroundPlate }) {
 
   return (
     <div className="card">
-      <PlaceholderImage hue={bg.hue} label={bg.name} aspect="aspect-[4/3]" />
+      <UploadableImage
+        imageUrl={bg.imageUrl ?? null}
+        hue={bg.hue}
+        label={bg.name}
+        caption="店内写真をアップロードできます"
+        aspect="aspect-[4/3]"
+        onChange={(url) =>
+          updateBackground(bg.id, {
+            imageUrl: url ?? undefined,
+            hasImage: !!url,
+          })
+        }
+      />
       <div className="mt-3 flex items-start justify-between gap-2">
         <h3 className="font-bold text-ink">{bg.name}</h3>
         <button

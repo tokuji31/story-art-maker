@@ -103,6 +103,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(seedState);
   const [hydrated, setHydrated] = useState(false);
   const didInit = useRef(false);
+  const quotaWarned = useRef(false);
   // 最新 state を同期的に参照するための ref（createStory が結果を返すため）
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -153,8 +154,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!hydrated) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      quotaWarned.current = false;
     } catch {
-      /* 容量超過などは無視 */
+      // 多くは画像の貼りすぎによる容量超過。一度だけ知らせる。
+      if (!quotaWarned.current && typeof window !== "undefined") {
+        quotaWarned.current = true;
+        window.alert(
+          "保存容量がいっぱいです。貼り付けた画像を減らす／削除すると保存できます（このデモは画像数枚向けです）。",
+        );
+      }
     }
   }, [state, hydrated]);
 

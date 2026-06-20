@@ -1,16 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { useStore } from "@/lib/store";
-import { generateImage } from "@/lib/imagePrompt";
 import {
   CopyButton,
   DifficultyTag,
   EmptyState,
   PageHeader,
-  PlaceholderImage,
   Pill,
+  UploadableImage,
 } from "@/components/ui";
 import {
   BackgroundPlate,
@@ -31,20 +29,13 @@ function DesignCard({
   tpl?: SafeTemplate;
 }) {
   const { updateDesign } = useStore();
-  const [genMsg, setGenMsg] = useState<string | null>(null);
 
-  const onGenerate = async () => {
-    setGenMsg("生成中…");
-    const url = await generateImage(design.prompt);
-    if (url) {
-      updateDesign(storyId, design.id, { imageUrl: url });
-      setGenMsg(null);
-    } else {
-      setGenMsg(
-        "画像生成APIが未接続のため、いまはプレースホルダー表示です（プロンプトと構図は完成しています）。",
-      );
-    }
-  };
+  const aspect =
+    design.kind === "cover" ||
+    design.kind === "instore" ||
+    design.kind === "postcard-v"
+      ? "aspect-[3/4]"
+      : "aspect-video";
 
   const border =
     design.verdict === "adopted"
@@ -58,25 +49,16 @@ function DesignCard({
       <div className="grid gap-4 md:grid-cols-[260px_1fr]">
         {/* 左：画像枠 */}
         <div>
-          <PlaceholderImage
+          <UploadableImage
+            imageUrl={design.imageUrl}
             hue={bg?.hue ?? "30"}
             label={design.label}
-            aspect={
-              design.kind === "postcard-v" || design.kind === "cover"
-                ? "aspect-[3/4]"
-                : design.kind === "instore"
-                  ? "aspect-[3/4]"
-                  : "aspect-video"
+            caption="ここに生成画像を貼れます"
+            aspect={aspect}
+            onChange={(url) =>
+              updateDesign(storyId, design.id, { imageUrl: url })
             }
           />
-          <button className="btn btn-soft mt-2 w-full" onClick={onGenerate}>
-            🪄 画像を生成（API接続時）
-          </button>
-          {genMsg && (
-            <p className="mt-1 text-[11px] leading-snug text-terracotta">
-              {genMsg}
-            </p>
-          )}
         </div>
 
         {/* 右：設計情報 */}
