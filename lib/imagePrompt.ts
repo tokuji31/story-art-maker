@@ -40,7 +40,11 @@ export const SIZE_BY_KIND: Record<ImageKind, string> = {
 };
 
 const STYLE_TAG =
-  "やさしい絵本タッチ、あたたかい水彩、メンズ理容室、落ち着いた個室、ぬくもりのある光";
+  "やわらかい色鉛筆と淡い水彩で描いた、上質であたたかい絵本の挿絵。きめ細かな毛並み・やさしい光・紙の質感、額装して飾れる繊細なタッチ。落ち着いた個室の理容室。怖い印象や鋭利な刃物の強調はしない";
+
+// つるるんとんの固定キャスト（画像生成プロンプトに毎回含める）
+const CAST_DESC =
+  "つる君＝カット担当のカワウソ（白いシャツ・黄色い数珠ブレス・穏やかな笑顔）。るんちゃん＝お顔剃り/毛穴洗浄/シャンプー担当のペンギン（紺色の体・オレンジの前掛け・黄色いスカーフ）。ロナ＝アプリコット色のトイプードル。ゲストは擬人化された動物。画像内に文字は入れない。";
 
 // ---- 生成前リスクチェック ---------------------------------------------
 
@@ -100,6 +104,7 @@ export function buildImagePrompt(args: BuildArgs): ImageDesignItem {
 
   const lines: string[] = [];
   lines.push(`【スタイル】${STYLE_TAG}`);
+  lines.push(`【キャラ設定（固定）】${CAST_DESC}`);
   lines.push(`【お店】${brand.store.name}（${brand.store.atmosphere}）`);
   if (sceneNote) lines.push(`【シーン】${sceneNote}`);
   if (charactersNote) lines.push(`【登場】${charactersNote}`);
