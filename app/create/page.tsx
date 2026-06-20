@@ -40,6 +40,7 @@ export default function CreatePage() {
   const {
     brand,
     textDesign,
+    stories,
     createStory,
     addStory,
     settings,
@@ -91,10 +92,13 @@ export default function CreatePage() {
     }
     setGenerating(true);
     try {
-      const story = await aiGenerateStory(input, brand, textDesign, {
-        apiKey: settings.anthropicApiKey,
-        model: settings.aiModel,
-      });
+      const story = await aiGenerateStory(
+        input,
+        brand,
+        textDesign,
+        { apiKey: settings.anthropicApiKey, model: settings.aiModel },
+        stories.map((s) => s.title), // 過去回と被らせない
+      );
       addStory(story);
       router.push("/story");
     } catch (e) {
