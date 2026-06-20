@@ -16,7 +16,7 @@ import React, {
 import { generateStory } from "./generate";
 import { buildDesignsForStory } from "./imagePrompt";
 import {
-  SAMPLE_STORY_INPUT,
+  SAMPLE_STORY,
   SEED_BACKGROUNDS,
   SEED_BRAND,
   SEED_TEMPLATES,
@@ -127,26 +127,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           settings: { ...base.settings, ...(parsed.settings ?? {}) },
         });
       } else {
-        // 初回：くま君サンプルを生成して保存済みとして投入
+        // 初回：完成見本「荷物の、半分こ」（全文）を保存済みとして投入
         const base = seedState();
-        const sample = generateStory(
-          SAMPLE_STORY_INPUT,
-          base.brand,
-          base.textDesign.pages,
-          base.textDesign.charsPerPage,
-          {
-            postcardLineChars: base.textDesign.postcardLineChars,
-            snsShortChars: base.textDesign.snsShortChars,
-            blogIntroChars: base.textDesign.blogIntroChars,
-          },
-        );
-        sample.status = "saved";
-        sample.imageDesigns = buildDesignsForStory(
-          sample,
-          base.brand,
-          base.backgrounds,
-          base.templates,
-        );
+        const sample: StoryResult = {
+          ...SAMPLE_STORY,
+          imageDesigns: buildDesignsForStory(
+            SAMPLE_STORY,
+            base.brand,
+            base.backgrounds,
+            base.templates,
+          ),
+        };
         setState({ ...base, stories: [sample], currentStoryId: sample.id });
       }
     } catch {
@@ -337,24 +328,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       /* noop */
     }
     const base = seedState();
-    const sample = generateStory(
-      SAMPLE_STORY_INPUT,
-      base.brand,
-      base.textDesign.pages,
-      base.textDesign.charsPerPage,
-      {
-        postcardLineChars: base.textDesign.postcardLineChars,
-        snsShortChars: base.textDesign.snsShortChars,
-        blogIntroChars: base.textDesign.blogIntroChars,
-      },
-    );
-    sample.status = "saved";
-    sample.imageDesigns = buildDesignsForStory(
-      sample,
-      base.brand,
-      base.backgrounds,
-      base.templates,
-    );
+    const sample: StoryResult = {
+      ...SAMPLE_STORY,
+      imageDesigns: buildDesignsForStory(
+        SAMPLE_STORY,
+        base.brand,
+        base.backgrounds,
+        base.templates,
+      ),
+    };
     setState({ ...base, stories: [sample], currentStoryId: sample.id });
   }, []);
 
