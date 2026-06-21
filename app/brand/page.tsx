@@ -3,16 +3,27 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { PageHeader, UploadableImage } from "@/components/ui";
+import { formatBytes } from "@/lib/image-upload";
 import {
   BrandLedger,
   CHARACTER_DIRECTION_LABEL,
   CHARACTER_DIRECTIONS,
 } from "@/lib/types";
 
+// 参照画像（4方向）の圧縮プリセット — 約50〜80KB/枚
+const REF_MAX_DIM = 512;
+const REF_QUALITY = 0.65;
+
 export default function BrandPage() {
-  const { brand, setBrand, hydrated } = useStore();
+  const { brand, setBrand, recompressAllImages, hydrated } = useStore();
   const [draft, setDraft] = useState<BrandLedger>(brand);
   const [saved, setSaved] = useState(false);
+  const [recompressBusy, setRecompressBusy] = useState(false);
+  const [recompressResult, setRecompressResult] = useState<{
+    before: number;
+    after: number;
+    count: number;
+  } | null>(null);
 
   // ストアがハイドレートされたら下書きを同期
   useEffect(() => {
@@ -163,6 +174,8 @@ export default function BrandPage() {
                       label={`${CHARACTER_DIRECTION_LABEL[dir]}向き`}
                       caption="この向きの絵を貼る"
                       aspect="aspect-square"
+                      maxDim={REF_MAX_DIM}
+                      quality={REF_QUALITY}
                       onChange={(url) => {
                         const next = [...draft.characters];
                         next[i] = {
@@ -275,6 +288,53 @@ export default function BrandPage() {
           >
             ＋ ルールを追加
           </button>
+        </div>
+      </section>
+
+      {/* 保存容量と再圧縮（localStorage が逼迫したとき用の救済） */}
+      <section className="card mb-4 border-sage/30 bg-sage/5">
+        <h2 className="section-title mb-2">🧹 保存容量と再圧縮</h2>
+        <p className="mb-3 text-[12px] leading-relaxed text-ink/55">
+          画像を貼って「保存容量がいっぱい」と表示されたら、このボタンで既存画像をまとめて再圧縮できます。
+          参照画像は長辺 {REF_MAX_DIM}px / quality {REF_QUALITY}、完成画像は長辺
+          1100px / quality 0.8 で再エンコードします。
+          <br />
+          <span className="text-[11px] text-ink/45">
+            ※ この操作は元に戻せません（画像の解像度は下がります）。
+          </span>
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className="btn btn-soft"
+            disabled={recompressBusy}
+            onClick={async () => {
+              setRecompressBusy(true);
+              setRecompressResult(null);
+              try {
+                const r = await recompressAllImages();
+                setRecompressResult(r);
+              } finally {
+                setRecompressBusy(false);
+              }
+            }}
+          >
+            {recompressBusy ? "圧縮中…" : "🧹 既存画像を圧縮し直す"}
+          </button>
+          {recompressResult && (
+            <span className="text-sm text-ink/75">
+              ✅ {recompressResult.count} 枚を再圧縮 ／ 全体容量{" "}
+              <strong>{formatBytes(recompressResult.before)}</strong> →{" "}
+              <strong>{formatBytes(recompressResult.after)}</strong>（
+              <strong className="text-green-700">
+                {formatBytes(
+                  Math.max(0, recompressResult.before - recompressResult.after),
+                )}{" "}
+                減
+              </strong>
+              ）
+            </span>
+          )}
         </div>
       </section>
 

@@ -14,6 +14,7 @@ import React, {
   useState,
 } from "react";
 import { generateStory } from "./generate";
+import { compressDataUrl } from "./image-upload";
 import { buildDesignsForStory } from "./imagePrompt";
 import {
   SAMPLE_STORY,
@@ -26,6 +27,8 @@ import {
 import {
   BackgroundPlate,
   BrandLedger,
+  Character,
+  CharacterReferenceImages,
   ImageDesignItem,
   OutputPlan,
   SafeTemplate,
@@ -93,8 +96,38 @@ interface StoreValue extends AppState {
   // 出力
   addOutput: (storyId: string, output: OutputPlan) => void;
   removeOutput: (storyId: string, outputId: string) => void;
+  // 画像の一括再圧縮（localStorage 逼迫時の救済）
+  recompressAllImages: () => Promise<{
+    before: number; // 圧縮前の JSON サイズ（バイト概算）
+    after: number; // 圧縮後の JSON サイズ
+    count: number; // 再圧縮した画像枚数
+  }>;
   // 全消去・初期化
   resetAll: () => void;
+}
+
+// 参照画像（4方向）の圧縮プリセット — 50〜80KB/枚を目安
+const REF_MAX_DIM = 512;
+const REF_QUALITY = 0.65;
+// 完成画像（imageDesigns / backgrounds）の圧縮プリセット — 200〜300KB/枚
+const ART_MAX_DIM = 1100;
+const ART_QUALITY = 0.8;
+
+// 4方向画像をまとめて再圧縮するヘルパ
+async function recompressRefImages(
+  ri: CharacterReferenceImages | undefined,
+): Promise<{ next: CharacterReferenceImages; count: number }> {
+  if (!ri) return { next: {}, count: 0 };
+  const next: CharacterReferenceImages = {};
+  let count = 0;
+  for (const dir of ["front", "right", "left", "back"] as const) {
+    const url = ri[dir];
+    if (url) {
+      next[dir] = await compressDataUrl(url, REF_MAX_DIM, REF_QUALITY);
+      count++;
+    }
+  }
+  return { next, count };
 }
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -329,6 +362,87 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  // すべての保存済み画像を再圧縮して localStorage を軽くする
+  const recompressAllImages = useCallback(async () => {
+    const s = stateRef.current;
+    const beforeSize = JSON.stringify(s).length;
+
+    let count = 0;
+
+    // 固定キャラの参照画像
+    const newCharacters: Character[] = [];
+    for (const c of s.brand.characters) {
+      const r = await recompressRefImages(c.referenceImages);
+      count += r.count;
+      newCharacters.push({ ...c, referenceImages: r.next });
+    }
+
+    // ストーリーごとの guestReferenceImages + 完成画像
+    const newStories: StoryResult[] = [];
+    for (const st of s.stories) {
+      const gri = st.guestReferenceImages;
+      const beforePhase = await recompressRefImages(gri?.before);
+      const afterPhase = await recompressRefImages(gri?.after);
+      count += beforePhase.count + afterPhase.count;
+
+      const newDesigns: ImageDesignItem[] = [];
+      for (const d of st.imageDesigns) {
+        if (d.imageUrl) {
+          const compressed = await compressDataUrl(
+            d.imageUrl,
+            ART_MAX_DIM,
+            ART_QUALITY,
+          );
+          count++;
+          newDesigns.push({ ...d, imageUrl: compressed });
+        } else {
+          newDesigns.push(d);
+        }
+      }
+
+      newStories.push({
+        ...st,
+        guestReferenceImages: {
+          before: beforePhase.next,
+          after: afterPhase.next,
+        },
+        imageDesigns: newDesigns,
+      });
+    }
+
+    // 背景プレートの完成画像
+    const newBackgrounds: BackgroundPlate[] = [];
+    for (const b of s.backgrounds) {
+      if (b.imageUrl) {
+        const compressed = await compressDataUrl(
+          b.imageUrl,
+          ART_MAX_DIM,
+          ART_QUALITY,
+        );
+        count++;
+        newBackgrounds.push({ ...b, imageUrl: compressed });
+      } else {
+        newBackgrounds.push(b);
+      }
+    }
+
+    const nextState: AppState = {
+      ...s,
+      brand: { ...s.brand, characters: newCharacters },
+      stories: newStories,
+      backgrounds: newBackgrounds,
+    };
+    setState(nextState);
+
+    const afterSize = JSON.stringify(nextState).length;
+    // base64 1文字 ≒ 0.75 バイト想定で概算
+    return {
+      before: Math.floor(beforeSize * 0.75),
+      after: Math.floor(afterSize * 0.75),
+      count,
+    };
+  }, []);
+
   const resetAll = useCallback(() => {
     try {
       localStorage.removeItem(STORAGE_KEY);
@@ -367,6 +481,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     updateDesign,
     addOutput,
     removeOutput,
+    recompressAllImages,
     resetAll,
   };
 

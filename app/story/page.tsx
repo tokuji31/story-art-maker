@@ -23,6 +23,10 @@ const GUEST_PHASE_HUE: Record<GuestPhase, string> = {
   after: "180",
 };
 
+// 参照画像（4方向）の圧縮プリセット — 約50〜80KB/枚
+const REF_MAX_DIM = 512;
+const REF_QUALITY = 0.65;
+
 export default function StoryPage() {
   const {
     stories,
@@ -174,6 +178,8 @@ export default function StoryPage() {
                     label={`${CHARACTER_DIRECTION_LABEL[dir]}向き`}
                     caption="この向きの絵を貼る"
                     aspect="aspect-square"
+                    maxDim={REF_MAX_DIM}
+                    quality={REF_QUALITY}
                     onChange={(url) => {
                       updateStory(story.id, {
                         guestReferenceImages: {

@@ -41,6 +41,8 @@ export function PlaceholderImage({
 }
 
 // ---- アップロード可能な画像枠（実画像を貼ると差し替わる） --------------
+// maxDim / quality を渡すと、その圧縮プリセットで保存される。
+// 参照画像（4方向）は 512 / 0.65 程度、完成画像は既定（1100 / 0.8）で。
 export function UploadableImage({
   imageUrl,
   hue = "30",
@@ -48,6 +50,8 @@ export function UploadableImage({
   caption = "画像プレースホルダー（生成API未接続）",
   aspect = "aspect-video",
   onChange,
+  maxDim,
+  quality,
 }: {
   imageUrl: string | null | undefined;
   hue?: string;
@@ -55,6 +59,8 @@ export function UploadableImage({
   caption?: string;
   aspect?: string;
   onChange: (dataUrl: string | null) => void;
+  maxDim?: number;
+  quality?: number;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -67,7 +73,7 @@ export function UploadableImage({
     setErr(null);
     setBusy(true);
     try {
-      const url = await fileToCompressedDataUrl(file);
+      const url = await fileToCompressedDataUrl(file, maxDim, quality);
       onChange(url);
     } catch {
       setErr("画像を読み込めませんでした。別の画像でお試しください。");
