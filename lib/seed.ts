@@ -42,6 +42,7 @@ export const SEED_BRAND: BrandLedger = {
         "落ち着いている、安心感がある、観察力がある、職人らしい。白いシャツに黄色い数珠ブレス、穏やかな笑顔のカワウソ。",
       storyRole: "カットや施術を通して、お客様の外見と心の輪郭を整える",
       emoji: "🦦",
+      referenceImages: {},
     },
     {
       id: "run",
@@ -51,6 +52,7 @@ export const SEED_BRAND: BrandLedger = {
         "やさしい、言葉で包む、本音を引き出す、気づきを与える。紺色の体にオレンジの前掛けと黄色いスカーフのペンギン。",
       storyRole: "お客様の愚痴や不安を受け止め、少しずつ心を軽くする",
       emoji: "🐧",
+      referenceImages: {},
     },
     {
       id: "rona",
@@ -60,6 +62,7 @@ export const SEED_BRAND: BrandLedger = {
         "無邪気、安心感、少し笑い、場をゆるめる。アプリコット色のくるくる巻き毛のトイプードル。",
       storyRole: "重くなりすぎた場面をやわらげる。最後の余韻や癒しに使う",
       emoji: "🐩",
+      referenceImages: {},
     },
   ],
   menu: {

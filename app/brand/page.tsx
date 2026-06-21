@@ -2,8 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
-import { PageHeader } from "@/components/ui";
-import { BrandLedger } from "@/lib/types";
+import { PageHeader, UploadableImage } from "@/components/ui";
+import {
+  BrandLedger,
+  CHARACTER_DIRECTION_LABEL,
+  CharacterDirection,
+} from "@/lib/types";
+
+const CHARACTER_DIRECTIONS: CharacterDirection[] = [
+  "front",
+  "right",
+  "left",
+  "back",
+];
 
 export default function BrandPage() {
   const { brand, setBrand, hydrated } = useStore();
@@ -142,6 +153,37 @@ export default function BrandPage() {
                     set({ characters: next });
                   }}
                 />
+              </div>
+
+              {/* 4方向の参照画像（Nano Banana Pro 用） */}
+              <div className="mt-3">
+                <label className="label">📷 参照画像（4方向）</label>
+                <p className="mb-2 text-[11px] text-ink/50">
+                  Nano Banana Pro 等で生成した立ち絵をここに貼ると、画像プロンプトに「この参照画像にそろえて」と自動で添えられます。
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {CHARACTER_DIRECTIONS.map((dir) => (
+                    <UploadableImage
+                      key={dir}
+                      imageUrl={c.referenceImages?.[dir] ?? null}
+                      hue="35"
+                      label={`${CHARACTER_DIRECTION_LABEL[dir]}向き`}
+                      caption="この向きの絵を貼る"
+                      aspect="aspect-square"
+                      onChange={(url) => {
+                        const next = [...draft.characters];
+                        next[i] = {
+                          ...c,
+                          referenceImages: {
+                            ...(c.referenceImages ?? {}),
+                            [dir]: url,
+                          },
+                        };
+                        set({ characters: next });
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           ))}

@@ -23,6 +23,25 @@ export interface StoreInfo {
   tagline: string; // お店の一言
 }
 
+// 固定キャラの参照画像（4方向）
+// Nano Banana Pro 等の画像生成AIに「この顔/体型/服装にそろえて」と
+// 一発で伝えるため、ブランド台帳に同梱する。各dataURLは圧縮済み。
+export interface CharacterReferenceImages {
+  front?: string | null; // 前向き（正面）
+  right?: string | null; // 右向き（横顔）
+  left?: string | null; // 左向き（横顔）
+  back?: string | null; // 後ろ向き
+}
+
+export type CharacterDirection = "front" | "right" | "left" | "back";
+
+export const CHARACTER_DIRECTION_LABEL: Record<CharacterDirection, string> = {
+  front: "前",
+  right: "右",
+  left: "左",
+  back: "後",
+};
+
 export interface Character {
   id: string;
   name: string; // つる君 / るんちゃん / ロナ
@@ -30,6 +49,7 @@ export interface Character {
   personality: string; // 性格
   storyRole: string; // 物語での役目
   emoji: string;
+  referenceImages?: CharacterReferenceImages; // 4方向の参照画像（任意）
 }
 
 export interface MenuStep {

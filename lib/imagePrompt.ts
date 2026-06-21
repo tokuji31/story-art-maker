@@ -11,6 +11,8 @@ import { genId } from "./id";
 import {
   BackgroundPlate,
   BrandLedger,
+  CHARACTER_DIRECTION_LABEL,
+  CharacterDirection,
   Difficulty,
   ImageDesignItem,
   ImageKind,
@@ -105,6 +107,25 @@ export function buildImagePrompt(args: BuildArgs): ImageDesignItem {
   const lines: string[] = [];
   lines.push(`【スタイル】${STYLE_TAG}`);
   lines.push(`【キャラ設定（固定）】${CAST_DESC}`);
+
+  // 参照画像が登録済みのキャラを「キャラ名（前/右/左/後）」形式でまとめ、
+  // Nano Banana Pro 等へ「この参照画像にそろえて描いて」と伝える1行を補強。
+  const dirs: CharacterDirection[] = ["front", "right", "left", "back"];
+  const refs = brand.characters
+    .map((c) => {
+      const ri = c.referenceImages;
+      if (!ri) return null;
+      const has = dirs.filter((d) => !!ri[d]);
+      if (has.length === 0) return null;
+      return `${c.name}（${has.map((d) => CHARACTER_DIRECTION_LABEL[d]).join("/")}）`;
+    })
+    .filter((s): s is string => !!s);
+  if (refs.length > 0) {
+    lines.push(
+      `【参照画像（登録済み）】${refs.join("・")} — 登録済みの参照画像と、顔・体型・服装・色を一致させる。`,
+    );
+  }
+
   lines.push(`【お店】${brand.store.name}（${brand.store.atmosphere}）`);
   if (sceneNote) lines.push(`【シーン】${sceneNote}`);
   if (charactersNote) lines.push(`【登場】${charactersNote}`);
