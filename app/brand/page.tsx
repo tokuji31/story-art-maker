@@ -6,15 +6,8 @@ import { PageHeader, UploadableImage } from "@/components/ui";
 import {
   BrandLedger,
   CHARACTER_DIRECTION_LABEL,
-  CharacterDirection,
+  CHARACTER_DIRECTIONS,
 } from "@/lib/types";
-
-const CHARACTER_DIRECTIONS: CharacterDirection[] = [
-  "front",
-  "right",
-  "left",
-  "back",
-];
 
 export default function BrandPage() {
   const { brand, setBrand, hydrated } = useStore();

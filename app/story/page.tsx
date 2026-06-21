@@ -3,7 +3,25 @@
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { checkAll } from "@/lib/expressionCheck";
-import { EmptyState, PageHeader, Pill } from "@/components/ui";
+import { EmptyState, PageHeader, Pill, UploadableImage } from "@/components/ui";
+import {
+  CHARACTER_DIRECTION_LABEL,
+  CHARACTER_DIRECTIONS,
+  GUEST_PHASE_LABEL,
+  GuestPhase,
+} from "@/lib/types";
+
+const GUEST_PHASES: GuestPhase[] = ["before", "after"];
+
+const GUEST_PHASE_HINT: Record<GuestPhase, string> = {
+  before: "来店〜ヘッドスパまでのページで使われます",
+  after: "鏡を見るシーン以降（帰り際・ハガキ縦・店内アート）で使われます",
+};
+
+const GUEST_PHASE_HUE: Record<GuestPhase, string> = {
+  before: "30",
+  after: "180",
+};
 
 export default function StoryPage() {
   const {
@@ -12,6 +30,7 @@ export default function StoryPage() {
     getStory,
     setCurrentStory,
     saveStory,
+    updateStory,
     backgrounds,
     hydrated,
   } = useStore();
@@ -116,6 +135,63 @@ export default function StoryPage() {
           </ul>
         </section>
       )}
+
+      {/* ゲスト参照画像（施術前/施術後 × 4方向） */}
+      <section className="card mb-4">
+        <h2 className="section-title mb-2">
+          📷 ゲスト参照画像（{story.input.guestName}）
+        </h2>
+        <p className="mb-3 text-[12px] leading-relaxed text-ink/55">
+          Nano Banana Pro 等で生成した「施術前」と「施術後」の立ち絵を貼ると、各ページの画像プロンプトに
+          <strong className="mx-0.5 text-ink/75">
+            「このシーンのゲストは ◯◯ の参照画像にそろえる」
+          </strong>
+          が自動で添えられます。
+          切替：<strong>鏡を見るシーン</strong>から自動で「施術後」に切り替わります。
+          <br />
+          <span className="text-[11px] text-ink/45">
+            ※ 画像を貼った後、🎨 画像設計ページで「🔁 画像案を生成 / 作り直す」を押すとプロンプトに反映されます。
+          </span>
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {GUEST_PHASES.map((phase) => (
+            <div
+              key={phase}
+              className="rounded-2xl border border-amber-100 bg-white/60 p-3"
+            >
+              <h3 className="mb-1 text-center text-sm font-bold text-ink/80">
+                {phase === "before" ? "🪑" : "✨"} {GUEST_PHASE_LABEL[phase]}
+              </h3>
+              <p className="mb-2 text-center text-[11px] text-ink/50">
+                {GUEST_PHASE_HINT[phase]}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {CHARACTER_DIRECTIONS.map((dir) => (
+                  <UploadableImage
+                    key={dir}
+                    imageUrl={story.guestReferenceImages?.[phase]?.[dir] ?? null}
+                    hue={GUEST_PHASE_HUE[phase]}
+                    label={`${CHARACTER_DIRECTION_LABEL[dir]}向き`}
+                    caption="この向きの絵を貼る"
+                    aspect="aspect-square"
+                    onChange={(url) => {
+                      updateStory(story.id, {
+                        guestReferenceImages: {
+                          ...(story.guestReferenceImages ?? {}),
+                          [phase]: {
+                            ...(story.guestReferenceImages?.[phase] ?? {}),
+                            [dir]: url,
+                          },
+                        },
+                      });
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* 感情の流れ */}
       <section className="card mb-4">

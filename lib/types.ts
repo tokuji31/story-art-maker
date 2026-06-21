@@ -42,6 +42,27 @@ export const CHARACTER_DIRECTION_LABEL: Record<CharacterDirection, string> = {
   back: "後",
 };
 
+export const CHARACTER_DIRECTIONS: CharacterDirection[] = [
+  "front",
+  "right",
+  "left",
+  "back",
+];
+
+// ゲストの「施術前 / 施術後」 × 4方向 の参照画像。
+// 鏡を見るシーン以降は after に自動で切り替わる（imagePrompt.ts で判定）。
+export interface GuestReferenceImagesByPhase {
+  before?: CharacterReferenceImages;
+  after?: CharacterReferenceImages;
+}
+
+export type GuestPhase = "before" | "after";
+
+export const GUEST_PHASE_LABEL: Record<GuestPhase, string> = {
+  before: "施術前",
+  after: "施術後",
+};
+
 export interface Character {
   id: string;
   name: string; // つる君 / るんちゃん / ロナ
@@ -184,6 +205,11 @@ export interface StoryResult {
   postcardLine: string; // ハガキ用一文
   snsShort: string; // SNS用短文
   blogIntro: string; // ブログ導入文
+
+  // ゲストの参照画像（施術前/施術後 × 4方向）。
+  // Nano Banana Pro 等で生成した立ち絵をここに紐づけ、
+  // 画像プロンプト生成時に「施術前/後」を自動で振り分けて挿入する。
+  guestReferenceImages?: GuestReferenceImagesByPhase;
 
   // 画像設計・出力・採用管理（後工程で追記される）
   imageDesigns: ImageDesignItem[];

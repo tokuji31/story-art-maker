@@ -14,11 +14,23 @@ import {
   CHARACTER_DIRECTION_LABEL,
   CharacterDirection,
   Difficulty,
+  GUEST_PHASE_LABEL,
+  GuestPhase,
+  GuestReferenceImagesByPhase,
   ImageDesignItem,
   ImageKind,
   SafeTemplate,
   StoryResult,
 } from "./types";
+
+// 「鏡を見る」シーンから施術後（after）として扱う。
+// それ以前（来店・カット・お顔剃り・毛穴洗浄・ヘッドスパ）は施術前（before）。
+const AFTER_BG_IDS = new Set<string>(["bg-mirror", "bg-rona"]);
+
+export function determineGuestPhase(bgId?: string): GuestPhase {
+  if (!bgId) return "before";
+  return AFTER_BG_IDS.has(bgId) ? "after" : "before";
+}
 
 export const IMAGE_API_ENABLED = false;
 
@@ -98,11 +110,23 @@ interface BuildArgs {
   sceneNote?: string; // ストーリーのページ画像シーン案など
   charactersNote?: string; // 登場キャラ
   textNote?: string; // 画像内テキスト（タイトル等）
+  guestPhase?: GuestPhase; // ゲストが施術前/後のどちらか
+  guestRefs?: GuestReferenceImagesByPhase; // ゲスト参照画像
 }
 
 export function buildImagePrompt(args: BuildArgs): ImageDesignItem {
-  const { kind, label, brand, bg, tpl, sceneNote, charactersNote, textNote } =
-    args;
+  const {
+    kind,
+    label,
+    brand,
+    bg,
+    tpl,
+    sceneNote,
+    charactersNote,
+    textNote,
+    guestPhase,
+    guestRefs,
+  } = args;
 
   const lines: string[] = [];
   lines.push(`【スタイル】${STYLE_TAG}`);
@@ -124,6 +148,22 @@ export function buildImagePrompt(args: BuildArgs): ImageDesignItem {
     lines.push(
       `【参照画像（登録済み）】${refs.join("・")} — 登録済みの参照画像と、顔・体型・服装・色を一致させる。`,
     );
+  }
+
+  // ゲスト参照画像（施術前/施術後 × 4方向）。
+  // シーン（背景プレート）に応じて自動で before/after どちらかが選ばれる。
+  if (guestRefs && guestPhase) {
+    const phaseRefs = guestRefs[guestPhase];
+    if (phaseRefs) {
+      const guestDirs = dirs
+        .filter((d) => !!phaseRefs[d])
+        .map((d) => CHARACTER_DIRECTION_LABEL[d]);
+      if (guestDirs.length > 0) {
+        lines.push(
+          `【ゲスト参照画像（${GUEST_PHASE_LABEL[guestPhase]}）】${guestDirs.join("/")} — このシーンのゲストは「${GUEST_PHASE_LABEL[guestPhase]}」の参照画像と顔・体型・服装・色を一致させる。`,
+        );
+      }
+    }
   }
 
   lines.push(`【お店】${brand.store.name}（${brand.store.atmosphere}）`);
@@ -193,8 +233,9 @@ export function buildDesignsForStory(
 
   const charNames = brand.characters.map((c) => c.name).join("・");
   const designs: ImageDesignItem[] = [];
+  const guestRefs = story.guestReferenceImages;
 
-  // キービジュアル（お店の世界観・ヘッドスパの安らぎ）
+  // キービジュアル（お店の世界観・ヘッドスパの安らぎ → 施術中なので before）
   designs.push(
     buildImagePrompt({
       kind: "keyvisual",
@@ -204,10 +245,12 @@ export function buildDesignsForStory(
       tpl: tplFor("bg-spa"),
       sceneNote: `『${story.title}』の世界観。${story.input.mood}な空気。`,
       charactersNote: charNames,
+      guestPhase: determineGuestPhase("bg-spa"),
+      guestRefs,
     }),
   );
 
-  // 表紙
+  // 表紙（来店時 → before）
   designs.push(
     buildImagePrompt({
       kind: "cover",
@@ -217,10 +260,12 @@ export function buildDesignsForStory(
       sceneNote: `表紙。${story.input.guestName}が主役。`,
       charactersNote: `${story.input.guestName}・つる君・るんちゃん`,
       textNote: `タイトル「${story.title}」`,
+      guestPhase: determineGuestPhase("bg-iriguchi"),
+      guestRefs,
     }),
   );
 
-  // 店内アート
+  // 店内アート（鏡を見るシーン → after）
   designs.push(
     buildImagePrompt({
       kind: "instore",
@@ -230,10 +275,12 @@ export function buildDesignsForStory(
       tpl: tplFor("bg-mirror"),
       sceneNote: "店内に飾る、落ち着いた1枚。",
       charactersNote: charNames,
+      guestPhase: determineGuestPhase("bg-mirror"),
+      guestRefs,
     }),
   );
 
-  // ハガキ縦・横
+  // ハガキ縦（帰り際の余韻 → after）
   designs.push(
     buildImagePrompt({
       kind: "postcard-v",
@@ -244,8 +291,11 @@ export function buildDesignsForStory(
       sceneNote: "ハガキ縦。帰り際の余韻。",
       charactersNote: story.input.useRona ? "ロナ" : "—",
       textNote: story.postcardLine,
+      guestPhase: determineGuestPhase("bg-rona"),
+      guestRefs,
     }),
   );
+  // ハガキ横（外観で人物は控えめ → before のままで支障なし）
   designs.push(
     buildImagePrompt({
       kind: "postcard-h",
@@ -254,10 +304,12 @@ export function buildDesignsForStory(
       bg: bgById("bg-gaikan"),
       sceneNote: "ハガキ横。お店の外観とやわらかい光。",
       textNote: story.postcardLine,
+      guestPhase: determineGuestPhase("bg-gaikan"),
+      guestRefs,
     }),
   );
 
-  // ページ挿絵（各ページ）
+  // ページ挿絵（各ページ：背景プレートIDから施術前/後を自動判定）
   story.pages.forEach((p) => {
     designs.push(
       buildImagePrompt({
@@ -268,6 +320,8 @@ export function buildDesignsForStory(
         tpl: tplFor(p.backgroundPlateId),
         sceneNote: p.imageScene,
         charactersNote: charNames,
+        guestPhase: determineGuestPhase(p.backgroundPlateId),
+        guestRefs,
       }),
     );
   });
